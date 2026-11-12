@@ -1,4 +1,4 @@
-import gc, io, os, re
+import gc, io, os, re, tempfile
 from collections import Counter, defaultdict
 import streamlit as st
 import ezdxf
@@ -16,13 +16,21 @@ def clean_text(s):
     return re.sub(r'\s+', ' ', s.replace('{','').replace('}','')).strip()
 
 def read_doc(b):
-    # DXF is normally ASCII; latin-1 is lossless byte-to-text fallback.
-    for enc in ('utf-8-sig','gb18030','latin-1'):
-        try:
-            return ezdxf.read(io.StringIO(b.decode(enc)))
-        except (UnicodeDecodeError, ezdxf.DXFStructureError):
-            continue
-    raise ValueError('Unsupported or damaged DXF.')
+    # ezdxf.read() on a decoded StringIO is fragile for real-world DXFs with legacy
+    # codepages/BOM issues. Let ezdxf read the uploaded bytes from a temporary file
+    # so it can handle the DXF header/codepage itself.
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".dxf", delete=False) as tmp:
+            tmp.write(b)
+            tmp_path = tmp.name
+        return ezdxf.readfile(tmp_path)
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
 def scan(doc):
     rows=[]
@@ -70,8 +78,15 @@ if uploaded is not None:
                 if e.dxftype()=='TEXT': e.dxf.text=new
                 else: e.text=new
                 changed.append((label,new,r[4],r[5],r[2],r[3]))
-        # Write directly to memory once; avoid duplicate temp files / cached DXF objects.
-        out=io.StringIO(); doc.write(out); payload=out.getvalue().encode('utf-8'); out.close()
+        # Let ezdxf write a real DXF file, then load only the completed download bytes.
+        fd, out_path = tempfile.mkstemp(suffix='.dxf'); os.close(fd)
+        try:
+            doc.saveas(out_path)
+            with open(out_path, 'rb') as f:
+                payload = f.read()
+        finally:
+            try: os.remove(out_path)
+            except OSError: pass
         name=re.sub(r'(?i)\.dxf$','',uploaded.name)+'_Room_Numbered.dxf'
         st.success(f'{len(changed)} labels changed.')
         st.download_button('DOWNLOAD DXF',payload,name,'application/dxf')

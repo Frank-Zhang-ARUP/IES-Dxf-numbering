@@ -1,27 +1,19 @@
 # DXF Room Function Numbering Tool
 
-Streamlit app for numbering identical room-function TEXT/MTEXT labels while leaving other drawing entities intentionally untouched.
+Streamlit app for numbering identical room-function TEXT/MTEXT labels.
 
-## Deploy to Streamlit Community Cloud
-1. Create a GitHub repository.
-2. Upload `app.py`, `requirements.txt`, and the `.streamlit` folder.
-3. In Streamlit Community Cloud choose **Create app** / **Deploy an app**.
-4. Select the repository and branch, and set the main file path to `app.py`.
-5. Deploy.
+## Deploy
+Upload `app.py`, `requirements.txt`, and `.streamlit/config.toml` to GitHub, then deploy `app.py` on Streamlit Community Cloud.
 
-## Memory design
-- Recommended DXF upload: <= 40 MB.
-- Streamlit upload hard limit configured at 50 MB.
-- DXF is parsed once per rerun and is not cached.
-- Uploaded raw bytes are deleted after parsing.
-- No CAD canvas/PNG preview is generated.
-- Output is serialized once for download.
+## Memory / compatibility design
+- Recommended upload <= 40 MB; server limit 50 MB.
+- No Streamlit cache stores the DXF document.
+- Uploaded bytes are written once to an ephemeral temp file and immediately released after parsing.
+- `ezdxf.readfile()` handles the DXF header/codepage directly instead of forcing UTF-8/GB18030 decoding.
+- Output is written to an ephemeral DXF file and only the final download bytes are retained.
+- No drawing preview or geometry rasterization.
 
-## Current scope
-- TEXT and MTEXT.
-- Scans modelspace and layouts.
-- Exact cleaned-room-label matching.
-- Independent numbering for each room function.
-- Block ATTRIB room names are not included yet.
-
-Always test on a copy of a production DXF first.
+## Scope
+- TEXT and MTEXT in modelspace/paperspace layouts.
+- Numbering restarts for each selected room function.
+- ATTRIB inside blocks is not yet included.
